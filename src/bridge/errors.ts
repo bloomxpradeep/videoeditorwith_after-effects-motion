@@ -7,16 +7,29 @@ export function isBridgeUnavailableMessage(message: string): boolean {
   );
 }
 
-export function bridgeUnavailableResult(tool: string, message: string): {
+export function bridgeUnavailableResult(tool: string, message: string, verifyTool = 'verify_premiere_connection'): {
   success: false;
   error: string;
   tool: string;
   retry: false;
   status: 'bridge_unavailable';
   userActionRequired: true;
-  agentAction: 'verify_premiere_connection';
+  agentAction: string;
   nextStep: string;
 } {
+  if (verifyTool !== 'verify_premiere_connection') {
+    return {
+      success: false,
+      error: message,
+      tool,
+      retry: false,
+      status: 'bridge_unavailable',
+      userActionRequired: true,
+      agentAction: verifyTool,
+      nextStep:
+        `Call ${verifyTool} once. It launches the app when installed and waits for the MCP Bridge panel. If that still fails, tell the user the nextStep from that result and stop. Do not retry other editing tools.`,
+    };
+  }
   return {
     success: false,
     error: message,

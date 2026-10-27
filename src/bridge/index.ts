@@ -13,6 +13,13 @@ import { promises as fs } from 'fs';
 import { extname, join, posix as pathPosix, win32 as pathWin32 } from 'path';
 import { createSecureTempDir, validateFilePath } from '../utils/security.js';
 import type { EnsureHostOptions, EnsureHostResult, PremiereProTransport } from './types.js';
+import {
+  PREMIERE_BRIDGE_NOT_STARTED,
+  PREMIERE_HOST_PROFILE,
+  PREMIERE_PANEL_NOT_RUNNING,
+  type BridgeHostProfile,
+} from './hosts.js';
+import { tmpdir } from 'node:os';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,10 +27,8 @@ export const BRIDGE_HEARTBEAT_FILE = 'bridge-heartbeat.json';
 export const BRIDGE_PANEL_ABSENT_MS = 1500;
 export const BRIDGE_HEARTBEAT_STALE_MS = 2500;
 export const HEALTH_CHECK_TIMEOUT_MS = 8000;
-export const BRIDGE_PANEL_NOT_RUNNING =
-  'MCP Bridge is not running. Open Adobe Premiere Pro. The MCP Bridge panel auto-starts when Premiere opens it. If the panel is missing, choose Window > Extensions > MCP Bridge. Call verify_premiere_connection once rather than retrying other tools.';
-export const BRIDGE_NOT_STARTED =
-  'MCP Bridge panel is open but the bridge is not started. Click Start Bridge, wait until it says Connected, then retry once.';
+export const BRIDGE_PANEL_NOT_RUNNING = PREMIERE_PANEL_NOT_RUNNING;
+export const BRIDGE_NOT_STARTED = PREMIERE_BRIDGE_NOT_STARTED;
 export const PREMIERE_LAUNCH_WAIT_MS = 45000;
 
 /**
@@ -912,15 +917,31 @@ export class PremiereProBridge implements PremiereProTransport {
   private sessionId: string;
   private premiereInstallPath: string | null = null;
   private premiereLaunchPath: string | null = null;
+  readonly host: BridgeHostProfile;
 
-  constructor() {
-    this.logger = new Logger('PremiereProBridge');
+  constructor(host: BridgeHostProfile = PREMIERE_HOST_PROFILE) {
+    this.host = host;
+    this.logger = new Logger(host.id === 'premiere' ? 'PremiereProBridge' : 'AfterEffectsBridge');
     this.communicationMethod = 'file'; // Default to file-based communication
     this.sessionId = randomUUID();
-    // Use PREMIERE_TEMP_DIR if set (same path as UXP plugin "Temp Directory"), else session-specific
-    const envDir = process.env.PREMIERE_TEMP_DIR;
+    // Use the host's env override (PREMIERE_TEMP_DIR / AE_TEMP_DIR) if set, so the server
+    // watches the same folder as the panel's "Temp Directory". Otherwise a host with a
+    // shared default folder uses it (it matches the panel's own default), and Premiere
+    // keeps its historical private per-session folder.
+    const envDir = process.env[host.tempDirEnv];
     this.usesExternalTempDir = Boolean(envDir);
-    this.tempDir = envDir ? envDir.replace(/\/$/, '') : createSecureTempDir(this.sessionId);
+    if (envDir) {
+      this.tempDir = envDir.replace(/[\\/]$/, '');
+    } else if (host.sharedTempDirName) {
+      this.tempDir = join(process.platform === 'win32' ? (process.env.TEMP || process.env.TMP || tmpdir()) : '/tmp', host.sharedTempDirName);
+    } else {
+      this.tempDir = createSecureTempDir(this.sessionId);
+    }
+  }
+
+  /** The folder this bridge writes commands into and the panel must watch. */
+  get bridgeDirectory(): string {
+    return this.tempDir;
   }
 
   async initialize(): Promise<void> {
@@ -929,9 +950,9 @@ export class PremiereProBridge implements PremiereProTransport {
       await this.detectPremiereProInstallation();
       await this.initializeCommunication();
       this.isInitialized = true;
-      this.logger.info('Adobe Premiere Pro bridge initialized successfully');
+      this.logger.info(`${this.host.displayName} bridge initialized successfully`);
     } catch (error) {
-      this.logger.error('Failed to initialize Adobe Premiere Pro bridge:', error);
+      this.logger.error(`Failed to initialize ${this.host.displayName} bridge:`, error);
       throw error;
     }
   }
@@ -964,7 +985,7 @@ export class PremiereProBridge implements PremiereProTransport {
 
       // Newest release first, e.g. "Adobe Premiere Pro 2026" before "... 2024"
       const candidates = entries
-        .filter(entry => entry.startsWith('Adobe Premiere Pro'))
+        .filter(entry => entry.startsWith(this.host.installDirPrefix))
         .sort()
         .reverse();
 
@@ -975,7 +996,7 @@ export class PremiereProBridge implements PremiereProTransport {
           const launchPath = await this.findPremiereLaunchPath(installPath);
           this.premiereInstallPath = installPath;
           if (launchPath) this.premiereLaunchPath = launchPath;
-          this.logger.info(`Found Adobe Premiere Pro at: ${installPath}`);
+          this.logger.info(`Found ${this.host.displayName} at: ${installPath}`);
           return;
         } catch {
           // Continue checking other candidates
@@ -983,14 +1004,17 @@ export class PremiereProBridge implements PremiereProTransport {
       }
     }
 
-    this.logger.warn('Adobe Premiere Pro installation not found in common paths');
+    this.logger.warn(`${this.host.displayName} installation not found in common paths`);
   }
 
   private async findPremiereLaunchPath(installPath: string): Promise<string | null> {
     if (process.platform === 'darwin') {
       try {
         const listing = await fs.readdir(installPath);
-        const app = listing.find((entry) => entry.endsWith('.app'));
+        const apps = listing.filter((entry) => entry.endsWith('.app'));
+        // After Effects ships helper apps beside the main one, so prefer the bundle
+        // named after the product before falling back to the first .app.
+        const app = apps.find((entry) => entry.startsWith(this.host.installDirPrefix)) ?? apps[0];
         if (app) return joinPremiereHostPath(installPath, app);
       } catch {
         return installPath;
@@ -998,7 +1022,7 @@ export class PremiereProBridge implements PremiereProTransport {
       return installPath;
     }
     if (process.platform === 'win32') {
-      const exe = joinPremiereHostPath(installPath, 'Adobe Premiere Pro.exe');
+      const exe = joinPremiereHostPath(installPath, ...this.host.windowsExecutable.split('\\'));
       try {
         await fs.access(exe);
         return exe;
@@ -1012,7 +1036,8 @@ export class PremiereProBridge implements PremiereProTransport {
   async ensureHost(options: EnsureHostOptions = {}): Promise<EnsureHostResult> {
     const launchIfNeeded = options.launchIfNeeded !== false;
     const waitMs = options.waitMs ?? PREMIERE_LAUNCH_WAIT_MS;
-    const tool = 'verify_premiere_connection';
+    const tool = this.host.verifyTool;
+    const messages = this.host.messages;
 
     if (!this.isInitialized) {
       await this.initialize();
@@ -1029,9 +1054,9 @@ export class PremiereProBridge implements PremiereProTransport {
         status: 'bridge_not_started',
         retry: false,
         userActionRequired: true,
-        agentAction: 'verify_premiere_connection',
-        nextStep: BRIDGE_NOT_STARTED,
-        error: BRIDGE_NOT_STARTED,
+        agentAction: this.host.verifyTool,
+        nextStep: messages.notStarted,
+        error: messages.notStarted,
         tool,
       };
     }
@@ -1044,8 +1069,8 @@ export class PremiereProBridge implements PremiereProTransport {
 
     if (!running && !launched) {
       const nextStep = this.premiereInstallPath
-        ? 'Adobe Premiere Pro is installed but could not be launched from this environment. Open Premiere yourself. The MCP Bridge panel auto-starts. Then run verify_premiere_connection once.'
-        : 'Adobe Premiere Pro is not installed in the usual location, so this server cannot launch it. Open Premiere, choose Window > Extensions > MCP Bridge if the panel does not appear, and run verify_premiere_connection once.';
+        ? messages.installedNotLaunched
+        : messages.notInstalled;
       return {
         ready: false,
         success: false,
@@ -1073,8 +1098,8 @@ export class PremiereProBridge implements PremiereProTransport {
     }
 
     const nextStep = launched
-      ? 'Premiere was launched but the MCP Bridge panel did not connect in time. When Premiere finishes opening, confirm Window > Extensions > MCP Bridge is visible, then run verify_premiere_connection once. Do not retry other tools yet.'
-      : BRIDGE_PANEL_NOT_RUNNING;
+      ? messages.launchedNoPanel
+      : messages.panelNotRunning;
     return {
       ready: false,
       success: false,
@@ -1094,16 +1119,16 @@ export class PremiereProBridge implements PremiereProTransport {
   private async isPremiereProcessRunning(): Promise<boolean> {
     try {
       if (process.platform === 'darwin') {
-        await execFileAsync('pgrep', ['-f', 'Adobe Premiere Pro'], { timeout: 3000 });
+        await execFileAsync('pgrep', ['-f', this.host.macProcessPattern], { timeout: 3000 });
         return true;
       }
       if (process.platform === 'win32') {
         const { stdout } = await execFileAsync(
           'tasklist',
-          ['/FI', 'IMAGENAME eq Adobe Premiere Pro.exe'],
+          ['/FI', `IMAGENAME eq ${this.host.windowsImageName}`],
           { timeout: 5000 },
         );
-        return /Adobe Premiere Pro\.exe/i.test(stdout);
+        return stdout.toLowerCase().includes(this.host.windowsImageName.toLowerCase());
       }
     } catch {
       return false;
@@ -1119,10 +1144,10 @@ export class PremiereProBridge implements PremiereProTransport {
           ? spawn('open', ['-a', this.premiereLaunchPath], { detached: true, stdio: 'ignore' })
           : spawn(this.premiereLaunchPath, [], { detached: true, stdio: 'ignore', windowsHide: false });
       child.unref();
-      this.logger.info(`Launched Adobe Premiere Pro from ${this.premiereLaunchPath}`);
+      this.logger.info(`Launched ${this.host.displayName} from ${this.premiereLaunchPath}`);
       return true;
     } catch (error) {
-      this.logger.warn(`Failed to launch Adobe Premiere Pro: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(`Failed to launch ${this.host.displayName}: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
@@ -1315,10 +1340,10 @@ export class PremiereProBridge implements PremiereProTransport {
       if (Date.now() - startTime >= BRIDGE_PANEL_ABSENT_MS) {
         const beat = await this.readHeartbeat();
         if (!beat) {
-          throw new Error(BRIDGE_PANEL_NOT_RUNNING);
+          throw new Error(this.host.messages.panelNotRunning);
         }
         if (!beat.started) {
-          throw new Error(BRIDGE_NOT_STARTED);
+          throw new Error(this.host.messages.notStarted);
         }
       }
 
@@ -1333,10 +1358,7 @@ export class PremiereProBridge implements PremiereProTransport {
       );
     }
 
-    throw new Error(
-      'Bridge response timeout. Ensure Premiere Pro is open, MCP Bridge (CEP or UXP) panel is open, ' +
-      'Temp Directory is set to ' + this.tempDir + ', and Start Bridge is clicked. Do not retry until the panel says Connected.'
-    );
+    throw new Error(this.host.messages.responseTimeout(this.tempDir));
   }
 
   // Project Management
