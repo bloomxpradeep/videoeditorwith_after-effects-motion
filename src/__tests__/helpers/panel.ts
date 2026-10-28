@@ -32,6 +32,8 @@ export interface LoadedPanel {
   handedToEvalScript: () => string;
   /** The fs stub the panel closed over at load. */
   fs: { writeFileSync: jest.Mock; existsSync: jest.Mock };
+  /** The host app the panel detected at load (window.MCP_BRIDGE_HOST). */
+  host: string;
 }
 
 /** Minimal stand-ins for what the panel pulls in at load time. */
@@ -40,6 +42,7 @@ function nodeStub(name: string, fsStub: Record<string, unknown>): unknown {
   if (name === 'path') {
     return {
       join: (...parts: string[]) => parts.join('/'),
+      resolve: (value: string) => value,
       basename: (value: string) => value.replace(/^.*[/\\]/, ''),
       dirname: (value: string) => {
         const normalized = String(value).replace(/\\/g, '/');
@@ -60,7 +63,13 @@ function nodeStub(name: string, fsStub: Record<string, unknown>): unknown {
   return {};
 }
 
-export function loadPanel(): LoadedPanel {
+/** Which Adobe app the stubbed CSInterface reports. Premiere unless a test asks otherwise. */
+export interface LoadPanelOptions {
+  appName?: 'PPRO' | 'AEFT';
+}
+
+export function loadPanel(options: LoadPanelOptions = {}): LoadedPanel {
+  const appName = options.appName ?? 'PPRO';
   const source = realFs.readFileSync(PANEL_PATH, 'utf8');
   let handed = '';
   const fsStub = {
@@ -79,10 +88,11 @@ export function loadPanel(): LoadedPanel {
     clearInterval: () => {},
     console: { log() {}, warn() {}, error() {} },
     require: (name: string) => nodeStub(name, fsStub),
+    process: { env: {} },
     __dirname: '/fake-cep',
     CSInterface: function () {
       return {
-        getHostEnvironment: () => ({ appName: 'PPRO', appVersion: '26.0.0' }),
+        getHostEnvironment: () => ({ appName, appVersion: '26.0.0' }),
         evalScript: (script: string) => { handed = script; },
         addEventListener() {},
       };
@@ -100,5 +110,10 @@ export function loadPanel(): LoadedPanel {
   bridge.normalizeHostEnvironment = (value: unknown) => value;
   bridge.log = () => {};
 
-  return { bridge, handedToEvalScript: () => handed, fs: fsStub as LoadedPanel['fs'] };
+  return {
+    bridge,
+    handedToEvalScript: () => handed,
+    fs: fsStub as LoadedPanel['fs'],
+    host: String((sandbox.window as { MCP_BRIDGE_HOST?: unknown }).MCP_BRIDGE_HOST ?? ''),
+  };
 }

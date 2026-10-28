@@ -520,9 +520,9 @@
 <body>
     <div class="shell">
         <section class="hero">
-            <div class="eyebrow">Premiere Automation</div>
+            <div class="eyebrow" id="hostEyebrow">Premiere Automation</div>
             <h1>MCP Bridge (CEP)</h1>
-            <div class="hero-copy">
+            <div class="hero-copy" id="heroCopy">
                 Real-time file bridge for Codex and other MCP clients. Keep the temp path aligned, start the bridge, and the panel will execute commands inside Premiere Pro.
             </div>
             <div class="hero-meta">
@@ -578,7 +578,7 @@
                     </div>
                 </div>
                 <div class="status-card">
-                    <div class="status-caption">Premiere</div>
+                    <div class="status-caption" id="hostCaption">Premiere</div>
                     <div class="status-indicator">
                         <div class="status-dot disconnected" id="serverStatus"></div>
                         <span class="status-text" id="serverText">Waiting for Premiere</span>
@@ -592,18 +592,11 @@
                 <h2>Configuration</h2>
                 <span>Shared temp directory</span>
             </div>
-            <div class="config-copy">
+            <div class="config-copy" id="tempEnvCopy">
                 This must match the `PREMIERE_TEMP_DIR` value used by your MCP client.
             </div>
             <label for="tempDirectory">Temp Directory</label>
             <input type="text" id="tempDirectory" placeholder="Temp Directory (e.g. /tmp/premiere-mcp-bridge)">
-            <label class="toggle-row" for="telemetryEnabled">
-                <input type="checkbox" id="telemetryEnabled" checked onchange="saveTelemetryPreference()">
-                <span class="toggle-copy">
-                    <span class="toggle-title">Share anonymous usage data</span>
-                    <span class="toggle-help">On by default. Sends tool names, success or failure, duration, OS, and version. Never sends project names, media paths, or arguments. Uncheck to opt out.</span>
-                </span>
-            </label>
             <div class="button-row">
                 <button class="primary" onclick="saveConfig()">Save Configuration</button>
             </div>
@@ -621,7 +614,7 @@
                 <button class="utility" onclick="clearLog()" id="clearButton">Clear Log</button>
             </div>
             <div class="micro-copy" style="margin-top: 10px; margin-bottom: 0;">
-                Reload the panel after updating bridge code so Premiere is not running stale JavaScript in memory. The bridge starts automatically when this panel loads. Stop Bridge still works if you need to pause it. Connect from Codex, Claude, or another MCP client using the same temp directory.
+                Reload the panel after updating bridge code so the app is not running stale JavaScript in memory. The bridge starts automatically when this panel loads. Stop Bridge still works if you need to pause it. Connect from Codex, Claude, or another MCP client using the same temp directory.
             </div>
         </section>
 
@@ -644,7 +637,7 @@
             </div>
             <div class="log-container" id="logContainer">
                 <div class="log-entry info">MCP Bridge (CEP) loaded. The bridge starts automatically when this panel opens.</div>
-                <div class="log-entry info">Set the temp directory to match your MCP client if it is not already /tmp/premiere-mcp-bridge.</div>
+                <div class="log-entry info">The temp directory must match your MCP client (default /tmp/premiere-mcp-bridge in Premiere, /tmp/ae-mcp-bridge in After Effects).</div>
             </div>
         </section>
 

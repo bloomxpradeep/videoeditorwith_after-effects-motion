@@ -1,13 +1,43 @@
 /**
- * MCP Premiere Pro Bridge (CEP)
- * Uses CSInterface.evalScript to run ExtendScript in Premiere Pro.
- * Works in release Premiere Pro — no Beta or UXP Developer Tool required.
+ * MCP Bridge (CEP) for Premiere Pro and After Effects
+ * Uses CSInterface.evalScript to run ExtendScript in the host app.
+ * Works in release builds — no Beta or UXP Developer Tool required.
+ *
+ * The same panel is installed for both apps. It reads which app it is running
+ * in once, at load, and from then on watches that app's own bridge folder and
+ * keeps that app's own panel settings, so Premiere and After Effects can run
+ * their panels side by side without picking up each other's commands.
  */
 
 (function() {
     var fs = require('fs');
     var path = require('path');
     var os = require('os');
+
+    function detectHostApp() {
+        try {
+            var env = new CSInterface().getHostEnvironment();
+            if (typeof env === 'string') env = JSON.parse(env);
+            if (env && env.appName) return String(env.appName);
+        } catch (eHost) {}
+        return 'PPRO';
+    }
+
+    // AEFT is After Effects; everything else is treated as Premiere (PPRO), which
+    // keeps every Premiere default exactly as it was before After Effects support.
+    var HOST_APP = detectHostApp();
+    var IS_AFTER_EFFECTS = HOST_APP === 'AEFT';
+    var HOST = IS_AFTER_EFFECTS ? {
+        label: 'After Effects',
+        tempEnv: 'AE_TEMP_DIR',
+        defaultDirName: 'ae-mcp-bridge',
+        panelConfigFile: 'config-aeft.json'
+    } : {
+        label: 'Premiere Pro',
+        tempEnv: 'PREMIERE_TEMP_DIR',
+        defaultDirName: 'premiere-mcp-bridge',
+        panelConfigFile: 'config.json'
+    };
     var EXTENDSCRIPT_COMPAT_HELPERS = [
         '// Built from character codes rather than backslash literals: this text is',
         '// assembled in JavaScript before it reaches the host, so an escape written',
@@ -209,11 +239,11 @@
     ].join('\n');
 
     function getDefaultTempPath() {
-        if (process.env.PREMIERE_TEMP_DIR) {
-            return sanitizeTempDirectoryInput(process.env.PREMIERE_TEMP_DIR);
+        if (process.env[HOST.tempEnv]) {
+            return sanitizeTempDirectoryInput(process.env[HOST.tempEnv]);
         }
         var base = (os.platform() === 'win32') ? (process.env.TEMP || process.env.TMP || 'C:\\Temp') : '/tmp';
-        return path.join(base, 'premiere-mcp-bridge');
+        return path.join(base, HOST.defaultDirName);
     }
 
     function getPanelConfigPath() {
@@ -221,7 +251,7 @@
         if (!fs.existsSync(configDir)) {
             fs.mkdirSync(configDir, { recursive: true });
         }
-        return path.join(configDir, 'config.json');
+        return path.join(configDir, HOST.panelConfigFile);
     }
 
     function readExistingPanelConfig() {
@@ -406,6 +436,9 @@
         try {
             if (trimmed.charAt(0) === '{') {
                 var parsed = JSON.parse(trimmed);
+                if (parsed && typeof parsed[HOST.tempEnv] === 'string') {
+                    return normalizePathLiteral(parsed[HOST.tempEnv]);
+                }
                 if (parsed && typeof parsed.PREMIERE_TEMP_DIR === 'string') {
                     return normalizePathLiteral(parsed.PREMIERE_TEMP_DIR);
                 }
@@ -415,7 +448,7 @@
             }
         } catch (e) {}
 
-        var envMatch = trimmed.match(/["']?PREMIERE_TEMP_DIR["']?\s*:\s*["']([^"']+)["']/);
+        var envMatch = trimmed.match(/["']?(?:PREMIERE_TEMP_DIR|AE_TEMP_DIR)["']?\s*:\s*["']([^"']+)["']/);
         if (envMatch && envMatch[1]) {
             trimmed = normalizePathLiteral(envMatch[1]);
         } else {
@@ -449,14 +482,29 @@
         return hostEnv;
     };
 
+    MCPPremiereBridge.prototype.applyHostLabels = function() {
+        function setText(id, text) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+        setText('hostEyebrow', HOST.label + ' Automation');
+        setText('hostCaption', HOST.label);
+        setText('serverText', 'Waiting for ' + HOST.label);
+        setText('heroCopy', 'Real-time file bridge for Claude and other MCP clients. Keep the temp path aligned, start the bridge, and the panel will execute commands inside ' + HOST.label + '.');
+        setText('tempEnvCopy', 'This must match the ' + HOST.tempEnv + ' value used by your MCP client.');
+        var tempEl = document.getElementById('tempDirectory');
+        if (tempEl && tempEl.setAttribute) tempEl.setAttribute('placeholder', 'Temp Directory (e.g. ' + getDefaultTempPath() + ')');
+    };
+
     MCPPremiereBridge.prototype.init = function() {
-        this.log('Initializing MCP Bridge (CEP)...', 'info');
+        this.applyHostLabels();
+        this.log('Initializing MCP Bridge (CEP) for ' + HOST.label + '...', 'info');
 
         // Check host environment
         try {
             var env = this.normalizeHostEnvironment(this.csInterface.getHostEnvironment());
             if (env) {
-                this.log('Premiere Pro version: ' + env.appVersion + ' (build ' + env.appId + ')', 'info');
+                this.log(HOST.label + ' version: ' + env.appVersion + ' (build ' + env.appId + ')', 'info');
             }
         } catch (e) {
             this.log('Warning: Could not get host environment: ' + e.message, 'warning');
@@ -630,7 +678,7 @@
             // Get host environment info for debugging
             var hostEnv = this.normalizeHostEnvironment(this.csInterface.getHostEnvironment());
             if (!hostEnv) {
-                callback(new Error('Could not get host environment. Is Premiere Pro running?'));
+                callback(new Error('Could not get host environment. Is ' + HOST.label + ' running?'));
                 this.releaseEvalScript();
                 return;
             }
@@ -661,7 +709,7 @@
             var timeoutId = setTimeout(function() {
                 notifyWaiter(new Error(
                     'ExtendScript execution timed out after ' + timeoutMs + 'ms. ' +
-                    'Premiere Pro or the CEP scripting host did not return a result.'
+                    HOST.label + ' or the CEP scripting host did not return a result.'
                 ));
                 // Do not release the native slot here. A second evalScript while the
                 // first callback is still outstanding is what wedges CEP until Premiere
@@ -781,8 +829,8 @@
             }
 
             var candidatePaths = this.tempDirectory ? [this.tempDirectory, getDefaultTempPath()] : [getDefaultTempPath()];
-            if (process.env.PREMIERE_TEMP_DIR) {
-                candidatePaths.push(sanitizeTempDirectoryInput(process.env.PREMIERE_TEMP_DIR));
+            if (process.env[HOST.tempEnv]) {
+                candidatePaths.push(sanitizeTempDirectoryInput(process.env[HOST.tempEnv]));
             }
 
             for (var i = 0; !this.tempDirectory && i < candidatePaths.length; i++) {
@@ -869,7 +917,7 @@
             this.updateServerStatus(false);
             return;
         }
-        this.log('Watching: ' + tempPath + ' (must match your MCP client PREMIERE_TEMP_DIR)', 'info');
+        this.log('Watching: ' + tempPath + ' (must match your MCP client ' + HOST.tempEnv + ')', 'info');
         this.updateServerStatus(true);
         this.log('Bridge ready. Connect from Codex, Claude, or another MCP client using this same temp directory.', 'info');
     };
@@ -888,6 +936,7 @@
         var report = {
             generatedAt: new Date().toISOString(),
             panel: 'MCP Bridge (CEP)',
+            host: HOST_APP,
             tempDirectory: this.getTempDirectory(),
             hostEnvironment: null,
             checks: []
@@ -992,10 +1041,10 @@
         })();';
         this.executeExtendScript(script, function(err, result) {
             if (err) {
-                self.log('Premiere Pro connection failed: ' + err.message, 'error');
+                self.log(HOST.label + ' connection failed: ' + err.message, 'error');
                 self.updateServerStatus(false);
             } else {
-                self.log('Premiere Pro connection OK: ' + JSON.stringify(result), 'info');
+                self.log(HOST.label + ' connection OK: ' + JSON.stringify(result), 'info');
                 self.updateServerStatus(true);
             }
         });
@@ -1027,10 +1076,10 @@
         if (serverStatus && serverText) {
             if (isRunning) {
                 serverStatus.className = 'status-dot connected';
-                serverText.textContent = 'Premiere Pro: Ready';
+                serverText.textContent = HOST.label + ': Ready';
             } else {
                 serverStatus.className = 'status-dot disconnected';
-                serverText.textContent = 'Premiere Pro: Waiting';
+                serverText.textContent = HOST.label + ': Waiting';
             }
         }
     };
@@ -1054,6 +1103,7 @@
     };
 
     window.MCPPremiereBridge = MCPPremiereBridge;
+    window.MCP_BRIDGE_HOST = HOST_APP;
     window.bridge = null;
     window.startBridge = function() { if (window.bridge) window.bridge.startBridge(); };
     window.stopBridge = function() { if (window.bridge) window.bridge.stopBridge(); };
