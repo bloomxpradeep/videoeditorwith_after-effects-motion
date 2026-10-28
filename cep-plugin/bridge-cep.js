@@ -304,7 +304,10 @@
         var self = this;
         var current = readInstalledPackageVersion();
         var config = readExistingPanelConfig();
-        if (config.updateCheck === false) return;
+        // Off unless config.json sets updateCheck: true. The check compares against
+        // the upstream npm package, and following its banner would replace this
+        // fork (and its After Effects support) with the original.
+        if (config.updateCheck !== true) return;
         var snoozedUntil = typeof config.updateSnoozedUntil === 'number' ? config.updateSnoozedUntil : 0;
         if (snoozedUntil > Date.now()) return;
         var https;

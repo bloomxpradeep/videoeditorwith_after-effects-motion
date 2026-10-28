@@ -400,7 +400,7 @@ By default `tools/list` advertises `search_tools`, `get_tool_schema`, `invoke_to
 
 ## Updates
 
-When a newer package is on npm, the MCP Bridge panel shows **Update now** and **Later**. Later snoozes the prompt for 7 days. Agents also see this on `get_capabilities`. Opt out with `PREMIERE_MCP_UPDATE_CHECK=0` or `"updateCheck": false` in `~/.premiere-mcp-bridge/config.json`.
+This fork does **not** check npm for updates. The upstream check compares against the original `adobe-premiere-pro-mcp` package, and following its prompt would replace this fork (and its After Effects support). To update, pull the latest code from this repository and re-run its installer. You can turn the upstream check back on with `PREMIERE_MCP_UPDATE_CHECK=1` or `"updateCheck": true` in `~/.premiere-mcp-bridge/config.json`.
 
 ## Troubleshooting
 

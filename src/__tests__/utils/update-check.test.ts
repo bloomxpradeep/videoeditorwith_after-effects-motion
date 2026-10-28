@@ -33,6 +33,12 @@ describe('isUpdateCheckEnabled', () => {
     expect(isUpdateCheckEnabled({ JEST_WORKER_ID: '1', PREMIERE_MCP_UPDATE_CHECK: '1' })).toBe(true);
   });
 
+  it('is off by default in this fork, so editors are never told to install the upstream package', () => {
+    expect(isUpdateCheckEnabled({})).toBe(false);
+    expect(isUpdateCheckEnabled({}, true)).toBe(true);
+    expect(isUpdateCheckEnabled({ PREMIERE_MCP_UPDATE_CHECK: '1' })).toBe(true);
+  });
+
   it('turns off for PREMIERE_MCP_UPDATE_CHECK=0', () => {
     expect(isUpdateCheckEnabled({ PREMIERE_MCP_UPDATE_CHECK: '0' })).toBe(false);
   });

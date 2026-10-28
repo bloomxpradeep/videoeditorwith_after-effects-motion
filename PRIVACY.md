@@ -43,7 +43,7 @@ When an endpoint is configured, a machine can still opt out in any of these ways
 
 The MCP server and CEP panel may request the latest published version from the public npm registry (`registry.npmjs.org/adobe-premiere-pro-mcp/latest`) so they can show an **Update now** / **Later** prompt. That request includes a package User-Agent and does not include the install id, project data, or tool arguments.
 
-Turn this off with `PREMIERE_MCP_UPDATE_CHECK=0`, or set `"updateCheck": false` in `~/.premiere-mcp-bridge/config.json`. **Later** snoozes the prompt for 7 days.
+In this fork the check is **off** and makes no request unless you set `PREMIERE_MCP_UPDATE_CHECK=1` or `"updateCheck": true` in `~/.premiere-mcp-bridge/config.json`. **Later** snoozes the prompt for 7 days.
 
 ## Third parties
 

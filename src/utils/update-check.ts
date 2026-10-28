@@ -84,9 +84,15 @@ export function compareSemver(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * Off unless explicitly turned on. The check looks up the *upstream* npm package
+ * (adobe-premiere-pro-mcp) and tells the user to install it, which would replace
+ * this fork and drop its After Effects support. Editors update this fork by
+ * re-running its installer instead.
+ */
 export function isUpdateCheckEnabled(
   env: UpdateEnv = process.env,
-  configEnabled = true,
+  configEnabled = false,
 ): boolean {
   if (env.JEST_WORKER_ID && envFlag(env, 'PREMIERE_MCP_UPDATE_CHECK') !== true) {
     return false;
@@ -99,7 +105,7 @@ export function isUpdateCheckEnabled(
 
 function configAllowsUpdateCheck(homedirPath: string): boolean {
   const config = readJsonObject(configPath(homedirPath));
-  return config?.updateCheck !== false;
+  return config?.updateCheck === true;
 }
 
 function snoozedUntil(homedirPath: string): number {
