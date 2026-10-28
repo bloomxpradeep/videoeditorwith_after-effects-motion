@@ -11,7 +11,9 @@ function printHelp(): void {
   console.log(`Premiere Pro MCP
 
 Usage:
-  premiere-pro-mcp                 Start the MCP stdio server
+  premiere-pro-mcp                 Start the MCP stdio server (Premiere Pro)
+  premiere-pro-mcp after-effects   Start the After Effects motion design server
+  premiere-pro-mcp motion-setup    Install the Motion Director editor setup (macOS)
   premiere-pro-mcp --install-cep   Install the CEP bridge and configure supported MCP clients
   premiere-pro-mcp --doctor        Check the local server, CEP bridge, and client configuration
   premiere-pro-mcp --version       Print the installed package version
@@ -58,6 +60,17 @@ async function main(): Promise<void> {
     case undefined:
     case 'serve':
       process.exitCode = await run(process.execPath, [serverEntry]);
+      return;
+    case 'after-effects':
+    case 'aftereffects':
+    case '--after-effects':
+      process.env.PREMIERE_MCP_APP = 'aftereffects';
+      process.exitCode = await run(process.execPath, [serverEntry]);
+      return;
+    case 'motion-setup':
+    case '--motion-setup':
+      if (process.platform !== 'darwin') throw new Error('The Motion Director setup currently supports macOS only.');
+      process.exitCode = await run('bash', [join(packageRoot, 'scripts', 'motion', 'setup-editor-macos.sh'), ...process.argv.slice(3)]);
       return;
     case '--install-cep':
     case 'install-cep':

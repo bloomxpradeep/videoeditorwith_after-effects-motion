@@ -3,14 +3,15 @@
 import { serveStdio, type StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { Server, ProtocolError, ProtocolErrorCode, type CallToolResult } from '@modelcontextprotocol/server';
 import { z, type ZodTypeAny } from 'zod';
-import { PremiereProTools } from './tools/index.js';
+import { PremiereProTools, type ServerApp } from './tools/index.js';
 import { PremiereProResources } from './resources/index.js';
 import { PremiereProPrompts } from './prompts/index.js';
 import { PremiereProBridge } from './bridge/index.js';
 import { Logger } from './utils/logger.js';
 import { PACKAGE_VERSION } from './version.js';
 import { checkForUpdate } from './utils/update-check.js';
-import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
+import { AE_SERVER_INSTRUCTIONS, MCP_SERVER_INSTRUCTIONS } from './instructions.js';
+import { AFTER_EFFECTS_HOST_PROFILE, PREMIERE_HOST_PROFILE } from './bridge/hosts.js';
 import {
   getTelemetry,
   summarizeToolFailure,
@@ -20,6 +21,27 @@ import {
 
 type ObjectJsonSchema = Record<string, unknown> & { type: 'object' };
 
+/**
+ * One binary, two servers. PREMIERE_MCP_APP=aftereffects (or the CLI's
+ * "after-effects" command) serves the After Effects and motion workflow tools on
+ * the AE bridge folder; anything else serves Premiere exactly as before.
+ */
+export function resolveServerApp(env: NodeJS.Dict<string | undefined> = process.env): ServerApp {
+  const raw = String(env.PREMIERE_MCP_APP ?? '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  return raw === 'aftereffects' || raw === 'ae' || raw === 'aeft' ? 'aftereffects' : 'premiere';
+}
+
+const AE_PROMPTS = [
+  {
+    name: 'motion_design_video',
+    description: 'Make a motion design video in After Effects from a talking-head clip, step by step: transcribe, references, storyboard, build scene by scene, review, render.',
+    arguments: [
+      { name: 'video_name', description: 'What to call this video', required: true },
+      { name: 'footage_path', description: 'Absolute path to the raw video, if it is already on disk', required: false },
+    ],
+  },
+];
+
 class MCPPremiereProServer {
   private stdioHandle?: StdioServerHandle;
   private tools: PremiereProTools;
@@ -28,23 +50,28 @@ class MCPPremiereProServer {
   private bridge: PremiereProBridge;
   private logger: Logger;
   private telemetry: Telemetry;
+  private readonly app: ServerApp;
 
   constructor() {
-    this.logger = new Logger('MCPPremiereProServer');
+    this.app = resolveServerApp();
+    this.logger = new Logger(this.app === 'aftereffects' ? 'MCPAfterEffectsServer' : 'MCPPremiereProServer');
     this.telemetry = getTelemetry();
 
-    this.bridge = new PremiereProBridge();
-    this.tools = new PremiereProTools(this.bridge);
+    this.bridge = new PremiereProBridge(this.app === 'aftereffects' ? AFTER_EFFECTS_HOST_PROFILE : PREMIERE_HOST_PROFILE);
+    this.tools = new PremiereProTools(this.bridge, { app: this.app });
     this.resources = new PremiereProResources(this.bridge);
     this.prompts = new PremiereProPrompts();
   }
 
   private buildServer(): Server {
+    const isAe = this.app === 'aftereffects';
     const server = new Server(
       {
-        name: 'adobe-premiere-pro-mcp',
+        name: isAe ? 'adobe-after-effects-motion-mcp' : 'adobe-premiere-pro-mcp',
         version: PACKAGE_VERSION,
-        description: 'Model Context Protocol tools for Adobe Premiere Pro - AI-powered video editing'
+        description: isAe
+          ? 'Model Context Protocol tools for Adobe After Effects motion design: transcribe, storyboard, build scene by scene, review, render'
+          : 'Model Context Protocol tools for Adobe Premiere Pro - AI-powered video editing'
       },
       {
         capabilities: {
@@ -52,7 +79,7 @@ class MCPPremiereProServer {
           resources: {},
           prompts: {}
         },
-        instructions: MCP_SERVER_INSTRUCTIONS
+        instructions: isAe ? AE_SERVER_INSTRUCTIONS : MCP_SERVER_INSTRUCTIONS
       }
     );
 
@@ -117,7 +144,7 @@ class MCPPremiereProServer {
     // List available resources
     server.setRequestHandler('resources/list', async () => {
       return {
-        resources: this.resources.getAvailableResources()
+        resources: this.app === 'aftereffects' ? [] : this.resources.getAvailableResources()
       };
     });
 
@@ -126,7 +153,7 @@ class MCPPremiereProServer {
       const { uri } = request.params;
       
       try {
-        const resource = this.resources.getResource(uri);
+        const resource = this.app === 'aftereffects' ? undefined : this.resources.getResource(uri);
         if (!resource) {
           throw new Error(`Resource '${uri}' not found`);
         }
@@ -155,7 +182,7 @@ class MCPPremiereProServer {
     // List available prompts
     server.setRequestHandler('prompts/list', async () => {
       return {
-        prompts: this.prompts.getAvailablePrompts()
+        prompts: this.app === 'aftereffects' ? AE_PROMPTS : this.prompts.getAvailablePrompts()
       };
     });
 
@@ -164,6 +191,26 @@ class MCPPremiereProServer {
       const { name, arguments: args } = request.params;
       
       try {
+        if (this.app === 'aftereffects') {
+          if (name !== 'motion_design_video') throw new Error(`Prompt '${name}' not found`);
+          const videoName = String((args as Record<string, unknown> | undefined)?.video_name ?? 'New video');
+          const footage = (args as Record<string, unknown> | undefined)?.footage_path;
+          return {
+            description: AE_PROMPTS[0]!.description,
+            messages: [{
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: [
+                  `Let's make a motion design video called "${videoName}".`,
+                  footage ? `The raw footage is at ${String(footage)}.` : 'I will give you the raw footage.',
+                  'Follow the six steps: connect After Effects (ae_verify_connection), transcribe with word timings and confirm names, study my references, write and check a storyboard and wait for my approval before touching After Effects, build scene by scene with named editable layers checking each one, then review everything against my rules before rendering.',
+                  'Stop and ask me at each checkpoint.',
+                ].join('\n'),
+              },
+            }],
+          };
+        }
         const prompt = await this.prompts.getPrompt(name, args || {});
         return {
           description: prompt.description,

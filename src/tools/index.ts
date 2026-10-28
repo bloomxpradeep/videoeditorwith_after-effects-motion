@@ -17,6 +17,8 @@ import type { ToolContext, ToolModule } from './context.js';
 import type { MCPTool } from './types.js';
 import { domainTools } from './domains/index.js';
 import { metaToolDefinitions } from './meta.js';
+import { aeTools } from '../aftereffects/tools.js';
+import { motionTools } from '../motion/tools.js';
 import {
   advertisedToolNames,
   categorizeTool,
@@ -42,6 +44,20 @@ const LOCAL_TOOLS: MCPTool[] = [...metaToolDefinitions, ...domainTools];
  * stay methods on the class rather than entries here.
  */
 const TOOL_HANDLERS = new Map<string, ToolModule>(domainTools.map((tool) => [tool.name, tool]));
+
+/**
+ * The After Effects server's catalog: AE tools plus the motion workflow tools.
+ * Small enough (under 40) to advertise in full, so it has no search layer.
+ */
+const AE_LOCAL_TOOLS: MCPTool[] = [...aeTools, ...motionTools];
+const AE_TOOL_HANDLERS = new Map<string, ToolModule>([...aeTools, ...motionTools].map((tool) => [tool.name, tool]));
+
+/** Which Adobe app this server instance drives. */
+export type ServerApp = 'premiere' | 'aftereffects';
+
+export interface PremiereProToolsOptions {
+  app?: ServerApp;
+}
 
 export function findNulByteArgument(value: any, path = ''): string | null {
   if (typeof value === 'string') {
@@ -69,9 +85,11 @@ export function findNulByteArgument(value: any, path = ''): string | null {
 export class PremiereProTools {
   private logger: Logger;
   private context: ToolContext;
+  readonly app: ServerApp;
 
-  constructor(bridge: PremiereProTransport) {
-    this.logger = new Logger('PremiereProTools');
+  constructor(bridge: PremiereProTransport, options: PremiereProToolsOptions = {}) {
+    this.app = options.app ?? 'premiere';
+    this.logger = new Logger(this.app === 'aftereffects' ? 'AfterEffectsTools' : 'PremiereProTools');
     this.context = {
       bridge,
       logger: this.logger,
@@ -81,11 +99,16 @@ export class PremiereProTools {
   }
 
   private getLocalTools(): MCPTool[] {
-    return LOCAL_TOOLS;
+    return this.app === 'aftereffects' ? AE_LOCAL_TOOLS : LOCAL_TOOLS;
+  }
+
+  private get verifyTool(): string {
+    return this.app === 'aftereffects' ? 'ae_verify_connection' : 'verify_premiere_connection';
   }
 
   getAvailableTools(): MCPTool[] {
     const localTools = this.getLocalTools();
+    if (this.app === 'aftereffects') return localTools;
     return [
       ...localTools,
       ...getExpandedTools(new Set(localTools.map((tool) => tool.name)))
@@ -94,6 +117,7 @@ export class PremiereProTools {
 
   getAdvertisedTools(): MCPTool[] {
     const catalog = this.getAvailableTools();
+    if (this.app === 'aftereffects') return catalog;
     const advertised = advertisedToolNames();
     if (!advertised) return catalog;
     const byName = new Map(catalog.map((tool) => [tool.name, tool]));
@@ -182,17 +206,17 @@ export class PremiereProTools {
     this.logger.info(`Executing tool: ${name} with args:`, args);
 
     const localToolNames = new Set(this.getLocalTools().map((localTool) => localTool.name));
-    if (!localToolNames.has(name) && isExpandedTool(name)) {
+    if (this.app === 'premiere' && !localToolNames.has(name) && isExpandedTool(name)) {
       return await executeExpandedTool(this.context.bridge, name, args);
     }
     
     try {
-      const handler = TOOL_HANDLERS.get(name);
+      const handler = (this.app === 'aftereffects' ? AE_TOOL_HANDLERS : TOOL_HANDLERS).get(name);
       if (handler) {
         return await handler.run(this.context, args);
       }
 
-      switch (name) {
+      switch (this.app === 'aftereffects' ? '' : name) {
         case 'search_tools':
           return this.searchToolsCatalog(args);
         case 'get_tool_schema':
@@ -213,7 +237,7 @@ export class PremiereProTools {
       this.logger.error(`Error executing tool ${name}:`, error);
       const message = error instanceof Error ? error.message : String(error);
       if (isBridgeUnavailableMessage(message)) {
-        return bridgeUnavailableResult(name, message);
+        return bridgeUnavailableResult(name, message, this.verifyTool);
       }
       return {
         success: false,

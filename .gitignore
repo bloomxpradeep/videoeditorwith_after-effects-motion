@@ -19,3 +19,7 @@ release-artifacts/
 
 # Cloudflare
 .wrangler/
+
+# Python caches from the motion helper scripts
+__pycache__/
+*.pyc
