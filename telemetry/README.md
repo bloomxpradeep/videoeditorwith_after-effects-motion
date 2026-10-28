@@ -1,8 +1,12 @@
 # Telemetry ingest
 
-Cloudflare Worker + D1 store for anonymous MCP usage events. The published MCP server posts to:
+Cloudflare Worker + D1 store for anonymous MCP usage events.
 
-`https://adobe-premiere-mcp-telemetry.hetkp8044.workers.dev/v1/event`
+This fork has **no** built-in destination: the MCP server sends nothing unless
+`PREMIERE_MCP_TELEMETRY_URL` is set. To collect usage for your own team, deploy
+this Worker to your own Cloudflare account (steps below) and set
+`PREMIERE_MCP_TELEMETRY_URL=https://<your-worker>.workers.dev/v1/event` in each
+MCP server's environment.
 
 `server_started` and every failed `tool_called` are stored. Successful tool
 calls are stored at most once per install/tool/UTC day so we can see that the

@@ -12,9 +12,9 @@ This data remains on the user's computer unless the user chooses to share it, fo
 
 ## Anonymous usage telemetry
 
-The MCP server sends anonymous usage telemetry by default so we can see how many people use the project, which tools they use, and which tools fail. This is separate from Premiere project data.
+This fork sends **no** usage telemetry by default. The built-in reporting address used by the upstream project has been removed, so no events leave the computer unless the person running the server sets `PREMIERE_MCP_TELEMETRY_URL` to an endpoint they operate themselves.
 
-Each event includes only:
+If such an endpoint is configured, each event includes only:
 
 - an anonymous install id stored in `~/.premiere-mcp-bridge/install-id`
 - a per-process session id
@@ -26,11 +26,11 @@ Each event includes only:
 
 It does **not** include project names, sequence names, media paths, file contents, tool arguments, tool results, or usernames. Error text is stored only after filesystem paths and filenames are stripped; if a path still remains, that field is dropped. Cloudflare sees the connecting IP the way it does for any HTTPS request; we do not store IP addresses in the telemetry database.
 
-Events are sent to a Cloudflare Worker operated for this project and stored in Cloudflare D1.
+Events go only to the address in `PREMIERE_MCP_TELEMETRY_URL`. The `telemetry/` folder contains a Cloudflare Worker and D1 schema you can deploy to your own account for this.
 
 ### Opt out
 
-Telemetry is on unless you turn it off in any of these ways:
+When an endpoint is configured, a machine can still opt out in any of these ways:
 
 1. Uncheck **Share anonymous usage data** in `Window > Extensions > MCP Bridge (CEP)` and save, or
 2. Set `telemetry` to `false` in `~/.premiere-mcp-bridge/config.json`, or

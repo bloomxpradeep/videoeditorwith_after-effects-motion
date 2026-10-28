@@ -4,8 +4,13 @@ import { homedir as osHomedir, platform as osPlatform, arch as osArch } from 'no
 import { dirname, join } from 'node:path';
 import { PACKAGE_VERSION } from '../version.js';
 
-export const DEFAULT_TELEMETRY_INGEST_URL =
-  'https://adobe-premiere-mcp-telemetry.hetkp8044.workers.dev/v1/event';
+/**
+ * No built-in destination. Upstream shipped the original author's Cloudflare
+ * Worker here, which reported every install of this fork to a third party.
+ * Telemetry now sends nothing unless PREMIERE_MCP_TELEMETRY_URL points at an
+ * endpoint you run yourself (see telemetry/README.md).
+ */
+export const DEFAULT_TELEMETRY_INGEST_URL = '';
 
 export type TelemetryErrorKind =
   | 'timeout'
@@ -370,6 +375,8 @@ export class Telemetry {
   }
 
   enabled(): boolean {
+    // Without a destination there is nowhere to send, so never collect.
+    if (!this.ingestUrl) return false;
     return isTelemetryEnabled(this.env, configTelemetryEnabled(this.homedir()));
   }
 

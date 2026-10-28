@@ -91,7 +91,7 @@ The installer configures Claude Desktop on macOS and Claude Desktop plus GitHub 
 }
 ```
 
-To opt out of anonymous usage telemetry, add `"env": { "PREMIERE_MCP_TELEMETRY": "0" }` to that server entry. See [Telemetry](#telemetry).
+This fork sends no usage telemetry. See [Telemetry](#telemetry).
 
 ### Install from source
 
@@ -383,11 +383,13 @@ This project is much more usable than the original prototype, but it is not magi
 
 ## Telemetry
 
-Anonymous usage telemetry is on by default so we can see how many people run the server, which tools they use, and which tools fail.
+This fork sends **no** usage telemetry by default. The upstream project reported usage to its author's server (`adobe-premiere-mcp-telemetry.hetkp8044.workers.dev`); that address has been removed from the code, so nothing leaves the computer.
 
-Each event is an install id, OS, and package version. `server_started` counts installs. Tool calls include the tool name and whether they succeeded. We keep every failure, and at most one successful call per tool per install per day. Failures also include duration, a short error code, the Zod field names that failed, and a path-stripped error template. Project names, media paths, arguments, and results are not sent. Details are in [PRIVACY.md](PRIVACY.md).
+If you want usage stats for your own team, deploy the Cloudflare Worker in [`telemetry/`](telemetry/README.md) to your own account and set `PREMIERE_MCP_TELEMETRY_URL` to its `/v1/event` address in the MCP server environment. Only then are events sent, and only to you.
 
-Opt out in any of these ways:
+When an address is set, each event is an install id, OS, and package version. `server_started` counts installs. Tool calls include the tool name and whether they succeeded. We keep every failure, and at most one successful call per tool per install per day. Failures also include duration, a short error code, the Zod field names that failed, and a path-stripped error template. Project names, media paths, arguments, and results are not sent. Details are in [PRIVACY.md](PRIVACY.md).
+
+With an address set, you can still opt a machine out in any of these ways:
 
 - Uncheck **Share anonymous usage data** in `Window > Extensions > MCP Bridge (CEP)`
 - Set `"telemetry": false` in `~/.premiere-mcp-bridge/config.json`

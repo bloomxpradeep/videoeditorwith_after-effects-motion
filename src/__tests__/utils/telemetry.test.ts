@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  DEFAULT_TELEMETRY_INGEST_URL,
   Telemetry,
   classifyToolError,
   isTelemetryEnabled,
@@ -205,6 +206,43 @@ describe('Telemetry', () => {
     telemetry.trackToolCall({ tool: 'ping', success: false, durationMs: 4 });
     await telemetry.flush();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('has no built-in destination', () => {
+    expect(DEFAULT_TELEMETRY_INGEST_URL).toBe('');
+  });
+
+  it('sends nothing when no destination is configured, even when explicitly enabled', async () => {
+    const telemetry = new Telemetry({
+      env: { PREMIERE_MCP_TELEMETRY: '1' },
+      homedir: () => home,
+      fetch: fetchMock,
+      randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    });
+    expect(telemetry.enabled()).toBe(false);
+    telemetry.trackServerStarted();
+    telemetry.trackToolCall({ tool: 'get_project_info', success: false, durationMs: 12 });
+    await telemetry.flush();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(() =>
+      readFileSync(join(home, '.premiere-mcp-bridge', 'install-id'), 'utf8'),
+    ).toThrow();
+  });
+
+  it('sends only to the address in PREMIERE_MCP_TELEMETRY_URL', async () => {
+    const telemetry = new Telemetry({
+      env: { PREMIERE_MCP_TELEMETRY: '1', PREMIERE_MCP_TELEMETRY_URL: 'https://team.example/v1/event' },
+      homedir: () => home,
+      fetch: fetchMock,
+      randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    });
+    telemetry.trackServerStarted();
+    await telemetry.flush();
+
+    expect(fetchMock).toHaveBeenCalled();
+    const calls = (fetchMock as jest.Mock).mock.calls;
+    for (const call of calls) expect(call[0]).toBe('https://team.example/v1/event');
   });
 
   it('sends only allowlisted fields and never includes args, paths, or unsanitized error text', async () => {
