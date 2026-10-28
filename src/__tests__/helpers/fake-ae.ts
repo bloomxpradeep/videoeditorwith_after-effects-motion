@@ -192,11 +192,11 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
   let undoDepth = 0;
 
   class FakeItem { id = nextId++; name = ''; parentFolder: unknown = null; typeName = 'Item'; remove() { project.items.list.splice(project.items.list.indexOf(this as never), 1); } }
-  class FolderItem extends FakeItem { typeName = 'Folder'; constructor(name: string) { super(); this.name = name; } }
+  class FolderItem extends FakeItem { override typeName = 'Folder'; constructor(name: string) { super(); this.name = name; } }
   class SolidSource {}
   class FileSource { isStill: boolean; constructor(still: boolean) { this.isStill = still; } }
   class FootageItem extends FakeItem {
-    typeName = 'Footage'; width = 1920; height = 1080; duration = 7; frameRate = 30; hasAudio = true; hasVideo = true;
+    override typeName = 'Footage'; width = 1920; height = 1080; duration = 7; frameRate = 30; hasAudio = true; hasVideo = true;
     file: FakeFile | null; mainSource: unknown;
     constructor(file: FakeFile | null, still = false, solid = false) {
       super(); this.file = file; this.name = file ? file.name : 'Solid';
@@ -209,7 +209,7 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
     name: string; index = 0; startTime = 0; enabled = true; shy = false; label = 0; parent: AVLayer | null = null;
     threeDLayer = false; adjustmentLayer = false; nullLayer = false; blendingMode = 0; source: unknown = null; containingComp: CompItem;
     groups: FakeGroup[];
-    private _out: number; private _locked = false;
+    _out: number; _locked = false;
     constructor(comp: CompItem, name: string, groups: FakeGroup[]) {
       this.containingComp = comp; this.name = name; this._out = comp.duration;
       this.groups = [transform([comp.width / 2, comp.height / 2]), G('ADBE Effect Parade', 'Effects', [], EFFECTS), ...groups];
@@ -238,7 +238,7 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
   class MarkerValue { comment: string; duration = 0; label = 0; constructor(c: string) { this.comment = c; } }
 
   class CompItem extends FakeItem {
-    typeName = 'Composition'; width: number; height: number; pixelAspect: number; duration: number; frameRate: number;
+    override typeName = 'Composition'; width: number; height: number; pixelAspect: number; duration: number; frameRate: number;
     bgColor = [0, 0, 0]; workAreaStart = 0; workAreaDuration: number; motionBlur = false; time = 0; layerList: AVLayer[] = [];
     markerProperty = P('ADBE Marker', 'Marker', null, CUSTOM);
     framesSaved: Array<{ t: number; path: string }> = [];
@@ -260,7 +260,7 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
       addNull: () => { const l = new AVLayer(this, 'Null 1', []); l.nullLayer = true; return this.push(l); },
       add: (item: FootageItem | CompItem) => { if (!item) throw new Error('layers.add needs an item'); const l = new AVLayer(this, item.name, []); l.source = item; if (item instanceof FootageItem) l.outPoint = Math.min(this.duration, item.duration || this.duration); return this.push(l); },
     };
-    private push(l: AVLayer) { this.layerList.unshift(l); this.reindex(); return l; }
+    push(l: AVLayer) { this.layerList.unshift(l); this.reindex(); return l; }
   }
   if (options.saveFrameToPng !== false) {
     CompItem.prototype.saveFrameToPng = function (this: CompItem, t: number, f: FakeFile) {
@@ -352,7 +352,7 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
   /** Runs one generated script the way the bridge does and returns its parsed result. */
   function runScript(script: string): any {
     // Syntax is checked by the ES3 parse elsewhere; here it only has to run.
-    vm.createScript(`(function(){\n${script}\n})`);
+    new vm.Script(`(function(){\n${script}\n})`);
     const fn = new Function(...names, `return (function(){\n${script}\n})();`);
     const raw = fn(...values);
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
