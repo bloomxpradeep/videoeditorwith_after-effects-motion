@@ -23,6 +23,18 @@
 
 [Website](https://premiere-mcp.com/) | [Install](#install) | [Codex plugin](#codex-plugin) | [Claude Code plugin](#claude-code-plugin) | [Verify](#verify-the-install) | [Telemetry](#telemetry) | [Privacy Policy](PRIVACY.md) | [Terms of Service](TERMS.md) | [Security](SECURITY.md)
 
+## New: After Effects motion design (Motion Director)
+
+This fork adds **Adobe After Effects**. Claude can make motion design videos with a video editor in six steps: transcribe a talking-head clip with word timings (local Whisper), study references, write a storyboard that is checked against the editor's rules and previewed over the real footage, build it in After Effects scene by scene as named, editable layers (letter-by-letter and pixel reveals timed to the spoken words), review its own work, and render.
+
+Editors install everything with one command on macOS and work from a **Motion Studio** folder in the Claude app's Code tab:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bloomxpradeep/videoeditorwith_after-effects-motion/main/scripts/motion/setup-editor-macos.sh | bash
+```
+
+Details, tools and architecture: [docs/MOTION-DIRECTOR.md](docs/MOTION-DIRECTOR.md). Editor walkthrough: [motion-studio/START HERE.md](motion-studio/START%20HERE.md).
+
 ## Install
 
 The supported bridge is the included **CEP panel**. Install the npm package on the same computer as Premiere Pro and your MCP client:
@@ -85,11 +97,14 @@ The installer configures Claude Desktop on macOS and Claude Desktop plus GitHub 
 {
   "mcpServers": {
     "premiere-pro": {
-      "command": "premiere-pro-mcp"
+      "command": "premiere-pro-mcp",
+      "env": { "PREMIERE_TEMP_DIR": "/tmp/premiere-mcp-bridge" }
     }
   }
 }
 ```
+
+`PREMIERE_TEMP_DIR` must match the panel's Temp Directory. Without it the server uses a private per-session folder the panel never watches.
 
 This fork sends no usage telemetry. See [Telemetry](#telemetry).
 
@@ -201,11 +216,14 @@ For manual registration in any MCP client, use the global command after npm inst
 {
   "mcpServers": {
     "premiere-pro": {
-      "command": "premiere-pro-mcp"
+      "command": "premiere-pro-mcp",
+      "env": { "PREMIERE_TEMP_DIR": "/tmp/premiere-mcp-bridge" }
     }
   }
 }
 ```
+
+`PREMIERE_TEMP_DIR` must match the panel's Temp Directory. Without it the server uses a private per-session folder the panel never watches.
 
 The supported UI bridge is CEP. If Premiere does not expose the extension, enable **UXP Plugins > Enable developer mode** in Premiere preferences, restart Premiere, and reopen the CEP panel. The bundled UXP panel remains experimental.
 

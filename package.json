@@ -1,7 +1,7 @@
 {
   "name": "adobe-premiere-pro-mcp",
   "version": "1.2.9",
-  "description": "MCP Bridge for Adobe Premiere Pro with a searchable catalog of 280 Premiere tools.",
+  "description": "MCP Bridge for Adobe Premiere Pro (280 tools) and After Effects motion design (Motion Director).",
   "main": "dist/index.js",
   "bin": {
     "premiere-pro-mcp": "dist/cli.js"
@@ -16,6 +16,8 @@
     "claude-plugins",
     "scripts",
     "skills",
+    "motion-studio",
+    "docs",
     "README.md",
     "QUICKSTART.md",
     "CHANGELOG.md",

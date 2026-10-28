@@ -4,6 +4,14 @@ All notable changes are documented here. Releases use semantic versioning.
 
 ## [Unreleased]
 
+- **After Effects motion design (Motion Director).** `premiere-pro-mcp after-effects` serves 30 `ae_*` tools and 10 `motion_*` workflow tools: local Whisper transcription with word timings and spelling fixes, reference downloads and frame grabs, face no-go zones, a rule-checked `storyboard.json` previewed as `storyboard.html` over the real footage, scene-by-scene After Effects builds with named editable layers and speech-timed letter and pixel reveals, review frames and contact sheets, and rendering. See `docs/MOTION-DIRECTOR.md`.
+- The MCP Bridge (CEP) panel now also loads in After Effects and watches its own folder (`/tmp/ae-mcp-bridge`) there.
+- `scripts/motion/setup-editor-macos.sh`: one-command editor setup that installs the helpers, the panel, local Whisper and OpenCV, and a Motion Studio folder for the Claude app's Code tab.
+- The `motion-director` skill walks editors through the six steps with an approval checkpoint after each.
+- Usage telemetry no longer goes to the upstream author's server: there is no built-in destination, and nothing is sent unless `PREMIERE_MCP_TELEMETRY_URL` is set.
+- Update checks against the upstream npm package are off by default (following them would replace this fork).
+- The Codex plugin config and README manual config now set `PREMIERE_TEMP_DIR`, so the server and panel share a folder.
+
 ## [1.2.9] - 2026-10-12
 
 - `export_sequence` finds Adobe Media Encoder inside the Creative Cloud folder

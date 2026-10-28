@@ -21,6 +21,10 @@ The last broad live sweep in this repository was run on March 4, 2026:
 
 Run `node scripts/live-tool-sweep.mjs` against a scratch Premiere project before making a new release-level validation claim.
 
+## After Effects (Motion Director)
+
+The After Effects tools are verified by parsing every generated script as ES3, by the CEP panel's own safety filter, and by running them against a fake After Effects DOM. They have not yet been run inside a real After Effects session. Current limits are listed in [docs/MOTION-DIRECTOR.md](docs/MOTION-DIRECTOR.md#known-limits).
+
 ## Confirmed Runtime Limitation
 
 ### `detect_silence` requires ffmpeg on PATH, and does not use Premiere's scripting API at all
