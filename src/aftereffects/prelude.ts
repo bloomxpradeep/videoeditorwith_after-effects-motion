@@ -176,10 +176,18 @@ function __aeEase(prop, kind, influence) {
     } catch (e) {}
   }
 }
+function __aeFitValue(prop, v) {
+  // [x, y] for a property that holds [x, y, z] (Position, Scale and Anchor Point
+  // do, even on 2D layers): keep the property's own remaining components.
+  var cur = null;
+  try { cur = prop.value; } catch (e) { cur = null; }
+  if ((v instanceof Array) && (cur instanceof Array) && v.length < cur.length && prop.propertyValueType !== PropertyValueType.COLOR) return v.concat(cur.slice(v.length));
+  return v;
+}
 function __aeSetKeys(prop, keys, kind, influence, clear) {
   if (!prop.canVaryOverTime) throw new Error("Property '" + prop.name + "' cannot be keyframed.");
   if (clear) { while (prop.numKeys > 0) prop.removeKey(prop.numKeys); }
-  for (var i = 0; i < keys.length; i++) prop.setValueAtTime(keys[i][0], keys[i][1]);
+  for (var i = 0; i < keys.length; i++) prop.setValueAtTime(keys[i][0], __aeFitValue(prop, keys[i][1]));
   __aeEase(prop, kind || "ease", influence);
   return prop.numKeys;
 }
@@ -215,6 +223,11 @@ function __aeAnchorTo(layer, mode, t) {
   var cur = ap.value;
   ap.setValue(cur.length === 3 ? [x, y, cur[2]] : [x, y]);
   return { left: r.left, top: r.top, width: r.width, height: r.height };
+}
+function __aeSetScale(layer, sx, sy) {
+  var p = layer.property("ADBE Transform Group").property("ADBE Scale");
+  var cur = p.value;
+  p.setValue(cur.length === 3 ? [sx, sy, cur[2]] : [sx, sy]);
 }
 function __aeSetPosition(layer, xy) {
   var p = layer.property("ADBE Transform Group").property("ADBE Position");
@@ -341,7 +354,7 @@ function __aeExpression(prop, expr) {
 function __aeMicroMotion(layer, style, amount, speed, phase) {
   var tg = layer.property("ADBE Transform Group");
   var f = speed, a = amount, ph = phase;
-  if (style === "drift") return __aeExpression(tg.property("ADBE Position"), "var a=" + a + "; var f=" + f + "; var ph=" + ph + "; add(value, [Math.sin(time*f*2*Math.PI+ph)*a, Math.cos(time*f*1.6*Math.PI+ph)*a*0.6]);");
+  if (style === "drift") return __aeExpression(tg.property("ADBE Position"), "var a=" + a + "; var f=" + f + "; var ph=" + ph + "; var o=[Math.sin(time*f*2*Math.PI+ph)*a, Math.cos(time*f*1.6*Math.PI+ph)*a*0.6]; value.length === 3 ? add(value, [o[0], o[1], 0]) : add(value, o);");
   if (style === "breathe") return __aeExpression(tg.property("ADBE Scale"), "var a=" + a + "; var f=" + f + "; var ph=" + ph + "; value * (1 + a*Math.sin(time*f*2*Math.PI+ph));");
   if (style === "sway") return __aeExpression(tg.property("ADBE Rotate Z"), "var a=" + a + "; var f=" + f + "; var ph=" + ph + "; value + a*Math.sin(time*f*2*Math.PI+ph);");
   if (style === "float") return __aeExpression(tg.property("ADBE Position"), "seedRandom(" + Math.round(ph * 1000) + ", true); wiggle(" + f + ", " + a + ");");

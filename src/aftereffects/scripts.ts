@@ -243,8 +243,7 @@ export function addFootageLayerScript(o: FootageLayerOptions): string {
   if (fit !== "none" && item.width && item.height) {
     var sx = comp.width / item.width, sy = comp.height / item.height;
     var s = (fit === "cover" ? Math.max(sx, sy) : Math.min(sx, sy)) * 100;
-    var sc = L.property("ADBE Transform Group").property("ADBE Scale"); var cur = sc.value;
-    sc.setValue(cur.length === 3 ? [s, s, cur[2]] : [s, s]);
+    __aeSetScale(L, s, s);
   }
   ${o.position ? `__aeSetPosition(L, [${n(o.position[0])}, ${n(o.position[1])}]);` : ''}
   ${o.locked ? 'L.locked = true;' : ''}
@@ -262,9 +261,10 @@ export interface TextLayerOptions {
 export function addTextLayerScript(o: TextLayerOptions): string {
   return aeScript('Add text layer', `
   var comp = __aeRequireComp(${js(o.compRef ?? null)});
-  var L = ${o.boxSize ? `comp.layers.addBoxText([${n(o.boxSize[0])}, ${n(o.boxSize[1])}], ${js(o.text)})` : `comp.layers.addText(${js(o.text)})`};
+  var L = ${o.boxSize ? `comp.layers.addBoxText([${n(o.boxSize[0])}, ${n(o.boxSize[1])}])` : `comp.layers.addText(${js(o.text)})`};
   ${o.name ? `L.name = ${js(o.name)};` : ''}
   var warnings = __aeStyleText(L, ${js({
+    text: o.boxSize ? o.text : undefined,
     font: o.font, fontSize: o.fontSize, color: o.color ?? '#FFFFFF', strokeColor: o.strokeColor, strokeWidth: o.strokeWidth,
     tracking: o.tracking, leading: o.leading, justification: o.justification ?? (o.anchor === 'center' ? 'center' : o.anchor), allCaps: o.allCaps,
   })});
@@ -696,7 +696,7 @@ export function setupFromStoryboardScript(o: SetupOptions): string {
     bg.moveToEnd();
     if (footage.width && footage.height) {
       var s = Math.max(comp.width / footage.width, comp.height / footage.height) * 100;
-      bg.property("ADBE Transform Group").property("ADBE Scale").setValue([s, s]);
+      __aeSetScale(bg, s, s);
     }
     bg.locked = true;
   }
@@ -754,7 +754,7 @@ function elementBlock(el: ResolvedElement, o: SceneBuildOptions, index: number):
       L.name = ${js(el.layerName)};
       L.startTime = ${n(el.timing.in)};
       try { __aeTiming(L, ${n(el.timing.in)}, ${n(el.timing.out)}); } catch (eT) { warnings.push(${js(`${el.layerName}: media is shorter than its beat; it ends early.`)}); }
-      if (item.width) { var ms = (${n((e.width ?? 0.3) * W)} / item.width) * 100; L.property("ADBE Transform Group").property("ADBE Scale").setValue([ms, ms]); }
+      if (item.width) { var ms = (${n((e.width ?? 0.3) * W)} / item.width) * 100; __aeSetScale(L, ms, ms); }
       __aeSetPosition(L, [${n(x)}, ${n(y)}]);`;
   }
   const plan: AnimationPlan = {

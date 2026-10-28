@@ -78,7 +78,7 @@ describe('storyboard to After Effects, end to end on the fake DOM', () => {
     expect(td.fillColor.map((v: number) => Math.round(v * 255))).toEqual([0x3d, 0xdc, 0x84]);
     expect(name.inPoint).toBe(0.82);
     expect(name.outPoint).toBe(2);
-    expect(prop(name, 'ADBE Transform Group', 'ADBE Position').value).toEqual([0.8 * 1920, 0.45 * 1080]);
+    expect(prop(name, 'ADBE Transform Group', 'ADBE Position').value).toEqual([0.8 * 1920, 0.45 * 1080, 0]);
 
     // Letter reveal keyed exactly to the resolved character keys.
     const sb = resolveStoryboard(storyboard(), normalizeWhisperJson(whisperJson()));
@@ -101,8 +101,8 @@ describe('storyboard to After Effects, end to end on the fake DOM', () => {
     // Shapes: underline grows from its left edge.
     const rule = c.layer('S01_shape_rule');
     const scale = prop(rule, 'ADBE Transform Group', 'ADBE Scale');
-    expect(scale.keys[0].v).toEqual([0, 100]);
-    expect(prop(rule, 'ADBE Transform Group', 'ADBE Anchor Point').value).toEqual([-150, 0]);
+    expect(scale.keys[0].v).toEqual([0, 100, 100]);
+    expect(prop(rule, 'ADBE Transform Group', 'ADBE Anchor Point').value).toEqual([-150, 0, 0]);
 
     // fade-up enters from 30px below.
     const who = c.layer('S02_text_who');
@@ -195,7 +195,8 @@ describe('direct tools on the fake DOM', () => {
     }
     expect(ae.undoDepth).toBe(0);
     const c = comp();
-    expect(prop(c.layer('T'), 'ADBE Transform Group', 'ADBE Scale').keys[0].easeIn).toHaveLength(2);
+    expect(prop(c.layer('T'), 'ADBE Transform Group', 'ADBE Scale').keys[0].easeIn).toHaveLength(3);
+    expect(prop(c.layer('T'), 'ADBE Transform Group', 'ADBE Scale').keys[0].v).toEqual([80, 80, 100]);
     expect(prop(c.layer('T'), 'ADBE Transform Group', 'ADBE Position').keys[0].inType).toBe(6612);
     expect(prop(c.layer('ADJ'), 'ADBE Effect Parade').numProperties).toBe(1);
     expect(prop(c.layer('ADJ'), 'ADBE Effect Parade', 'ADBE Gaussian Blur 2', 'Blurriness').keys).toHaveLength(2);

@@ -85,7 +85,7 @@ export class FakeProperty {
     if (Array.isArray(this._value) && this.propertyValueType !== CUSTOM && this.propertyValueType !== COLOR) {
       if (!Array.isArray(v)) throw new Error(`'${this.name}' needs an array value, got ${String(v)}`);
       if ((v as unknown[]).some((x) => typeof x !== 'number' || !Number.isFinite(x))) throw new Error(`'${this.name}' got a non-number in ${JSON.stringify(v)}`);
-      if (this.propertyValueType !== TWO_D && (v as unknown[]).length !== (this._value as unknown[]).length) throw new Error(`'${this.name}' value has the wrong number of dimensions`);
+      if ((v as unknown[]).length !== (this._value as unknown[]).length) throw new Error(`'${this.name}' needs ${(this._value as unknown[]).length} values, got ${JSON.stringify(v)}`);
     } else if (this.propertyValueType === ONE_D && (typeof v !== 'number' || !Number.isFinite(v))) {
       throw new Error(`'${this.name}' needs a number, got ${JSON.stringify(v)}`);
     }
@@ -134,11 +134,13 @@ const EFFECTS: Record<string, Factory> = {
 EFFECTS['Mosaic'] = EFFECTS['ADBE Mosaic']!;
 EFFECTS['Gaussian Blur'] = EFFECTS['ADBE Gaussian Blur 2']!;
 
+const THREE_D = 6414;
+// Like After Effects, transform values have three components even on 2D layers.
 function transform(position: number[]): FakeGroup {
   return G('ADBE Transform Group', 'Transform', [
-    P('ADBE Anchor Point', 'Anchor Point', [0, 0], SPATIAL_2D),
-    P('ADBE Position', 'Position', position, SPATIAL_2D),
-    P('ADBE Scale', 'Scale', [100, 100], TWO_D),
+    P('ADBE Anchor Point', 'Anchor Point', [0, 0, 0], SPATIAL_3D),
+    P('ADBE Position', 'Position', [position[0]!, position[1]!, 0], SPATIAL_3D),
+    P('ADBE Scale', 'Scale', [100, 100, 100], THREE_D),
     P('ADBE Rotate Z', 'Rotation', 0),
     P('ADBE Opacity', 'Opacity', 100),
   ]);
@@ -252,7 +254,7 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
     declare saveFrameToPng?: (t: number, f: FakeFile) => void;
     layers = {
       addText: (text: string) => this.push(new TextLayer(this, text, [textProperties(text, fonts)])),
-      addBoxText: (_size: number[], text: string) => this.push(new TextLayer(this, text, [textProperties(text, fonts)])),
+      addBoxText: (size: number[], text?: string) => { if (!Array.isArray(size) || size.length !== 2) throw new Error('addBoxText needs [width, height]'); return this.push(new TextLayer(this, text ?? 'Text', [textProperties(text ?? '', fonts)])); },
       addShape: () => this.push(new ShapeLayer(this, 'Shape Layer 1', [shapeContents()])),
       addSolid: (color: number[], name: string) => { const l = new AVLayer(this, name, []); l.source = new FootageItem(null, false, true); (l.source as FootageItem).name = name; if (!Array.isArray(color) || color.length !== 3) throw new Error('addSolid colour must be [r,g,b]'); return this.push(l); },
       addNull: () => { const l = new AVLayer(this, 'Null 1', []); l.nullLayer = true; return this.push(l); },
@@ -336,7 +338,7 @@ export function createFakeAe(options: { fonts?: string[]; saveFrameToPng?: boole
     ImportAsType: { FOOTAGE: 1, COMP: 2 },
     KeyframeEase: class { speed: number; influence: number; constructor(s: number, i: number) { if (i < 0.1 || i > 100) throw new Error('KeyframeEase influence must be 0.1-100'); this.speed = s; this.influence = i; } },
     KeyframeInterpolationType: { LINEAR: 6612, BEZIER: 6613, HOLD: 6614 },
-    PropertyValueType: { TwoD_SPATIAL: SPATIAL_2D, ThreeD_SPATIAL: SPATIAL_3D, TwoD: TWO_D, OneD: ONE_D, COLOR, NO_VALUE, CUSTOM_VALUE: CUSTOM },
+    PropertyValueType: { TwoD_SPATIAL: SPATIAL_2D, ThreeD_SPATIAL: SPATIAL_3D, TwoD: TWO_D, ThreeD: THREE_D, OneD: ONE_D, COLOR, NO_VALUE, CUSTOM_VALUE: CUSTOM },
     ParagraphJustification: { LEFT_JUSTIFY: 7413, CENTER_JUSTIFY: 7415, RIGHT_JUSTIFY: 7414 },
     BlendingMode: { NORMAL: 5212, SCREEN: 5220, ADD: 5213, MULTIPLY: 5219 },
     CloseOptions: { DO_NOT_SAVE_CHANGES: 1 },
